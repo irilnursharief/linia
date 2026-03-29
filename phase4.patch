@@ -1,0 +1,915 @@
+diff --git a/accounts/templates/accounts/login.html b/accounts/templates/accounts/login.html
+new file mode 100644
+index 0000000..74d125c
+--- /dev/null
++++ b/accounts/templates/accounts/login.html
+@@ -0,0 +1,24 @@
++{% extends 'base.html' %}
++
++{% block content %}
++    <div class="max-w-md mx-auto bg-white rounded-lg shadow-sm p-8">
++        <h1 class="text-2xl font-bold mb-6">Login</h1>
++        <form method="POST">
++            {% csrf_token %}
++            {% for field in form %}
++                <div class="mb-4">
++                    <label class="block font-semibold mb-1 text-slate-700">
++                        {{ field.label }}
++                    </label>
++                    {{ field }}
++                    {% if field.errors %}
++                        <p class="text-red-500 text-sm mt-1">{{ field.errors }}</p>
++                    {% endif %}
++                </div>
++            {% endfor %}
++            <button type="submit" class="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 transition font-semibold">
++                Login
++            </button>
++        </form>
++    </div>
++{% endblock %}
+\ No newline at end of file
+diff --git a/accounts/urls.py b/accounts/urls.py
+new file mode 100644
+index 0000000..177d2d2
+--- /dev/null
++++ b/accounts/urls.py
+@@ -0,0 +1,7 @@
++from django.urls import path
++from django.contrib.auth import views as auth_views
++
++urlpatterns = [
++    path('login/', auth_views.LoginView.as_view(template_name='accounts/login.html'), name='login'),
++    path('logout/', auth_views.LogoutView.as_view(), name='logout'),
++]
+\ No newline at end of file
+diff --git a/config/django/base.py b/config/django/base.py
+index bc03549..6a213b3 100644
+--- a/config/django/base.py
++++ b/config/django/base.py
+@@ -117,9 +117,14 @@ USE_TZ = True
+ 
+ # Static files (CSS, JavaScript, Images)
+ STATIC_URL = 'static/'
++STATICFILES_DIRS = [BASE_DIR / 'static']
+ 
+ 
+ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+ 
+ # Custom User Model
+-AUTH_USER_MODEL = 'accounts.User'
+\ No newline at end of file
++AUTH_USER_MODEL = 'accounts.User'
++
++LOGIN_URL          = '/accounts/login/'
++LOGIN_REDIRECT_URL = '/counter/'
++LOGOUT_REDIRECT_URL = '/accounts/login/'
+\ No newline at end of file
+diff --git a/config/urls.py b/config/urls.py
+index c74036a..44dbb45 100644
+--- a/config/urls.py
++++ b/config/urls.py
+@@ -1,22 +1,9 @@
+-"""
+-URL configuration for config project.
+-
+-The `urlpatterns` list routes URLs to views. For more information please see:
+-    https://docs.djangoproject.com/en/6.0/topics/http/urls/
+-Examples:
+-Function views
+-    1. Add an import:  from my_app import views
+-    2. Add a URL to urlpatterns:  path('', views.home, name='home')
+-Class-based views
+-    1. Add an import:  from other_app.views import Home
+-    2. Add a URL to urlpatterns:  path('', Home.as_view(), name='home')
+-Including another URLconf
+-    1. Import the include() function: from django.urls import include, path
+-    2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
+-"""
+ from django.contrib import admin
+-from django.urls import path
++from django.urls import path, include
+ 
+ urlpatterns = [
+     path('admin/', admin.site.urls),
+-]
++    path('accounts/', include('accounts.urls')),
++    path('counter/', include('counters.urls')),
++    path('', include('queueing.urls')),
++]
+\ No newline at end of file
+diff --git a/counters/templates/counters/dashboard.html b/counters/templates/counters/dashboard.html
+new file mode 100644
+index 0000000..b21de28
+--- /dev/null
++++ b/counters/templates/counters/dashboard.html
+@@ -0,0 +1,78 @@
++{% extends 'base.html' %}
++
++{% block content %}
++    <div class="mb-6">
++        <h1 class="text-2xl font-bold">Counter Dashboard</h1>
++        {% if counter %}
++            <p class="text-slate-500 mt-1">Counter {{ counter.number }} — {{ counter.service.name }}</p>
++        {% else %}
++            <p class="text-red-500 mt-1">No open counter assigned to you.</p>
++        {% endif %}
++    </div>
++
++    {% if counter %}
++        <!-- Current Ticket -->
++        <div class="bg-white rounded-lg shadow-sm p-6 mb-6">
++            <h2 class="text-lg font-bold mb-4">Now Serving</h2>
++            {% if current_ticket %}
++                <div class="text-center">
++                    <p class="text-5xl font-bold text-blue-600 mb-2">
++                        {{ current_ticket.ticket_number }}
++                    </p>
++                    <p class="text-slate-500">{{ current_ticket.get_client_type_display }}</p>
++                </div>
++                <div class="flex gap-3 mt-6 justify-center">
++                    <form method="POST" action="{% url 'counter-recall' %}">
++                        {% csrf_token %}
++                        <button type="submit" class="bg-amber-400 text-white px-4 py-2 rounded hover:bg-amber-500 transition">
++                            Recall
++                        </button>
++                    </form>
++                    <form method="POST" action="{% url 'counter-no-show' %}">
++                        {% csrf_token %}
++                        <button type="submit" class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 transition">
++                            No Show
++                        </button>
++                    </form>
++                    <form method="POST" action="{% url 'counter-complete' %}">
++                        {% csrf_token %}
++                        <button type="submit" class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 transition">
++                            Complete
++                        </button>
++                    </form>
++                </div>
++            {% else %}
++                <p class="text-slate-400 text-center">No ticket currently being served.</p>
++            {% endif %}
++        </div>
++
++        <!-- Call Next -->
++        <div class="bg-white rounded-lg shadow-sm p-6 mb-6">
++            <div class="flex justify-between items-center">
++                <div>
++                    <h2 class="text-lg font-bold">Waiting Queue</h2>
++                    <p class="text-slate-500 text-sm mt-1">
++                        {{ waiting_tickets.count }} ticket{{ waiting_tickets.count|pluralize }} waiting
++                    </p>
++                </div>
++                <form method="POST" action="{% url 'counter-call-next' %}">
++                    {% csrf_token %}
++                    <button type="submit" class="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 transition font-semibold">
++                        Call Next
++                    </button>
++                </form>
++            </div>
++
++            {% if waiting_tickets %}
++                <div class="mt-4 space-y-2">
++                    {% for ticket in waiting_tickets %}
++                        <div class="flex justify-between items-center p-3 bg-slate-50 rounded">
++                            <span class="font-semibold">{{ ticket.ticket_number }}</span>
++                            <span class="text-sm text-slate-500">{{ ticket.get_client_type_display }}</span>
++                        </div>
++                    {% endfor %}
++                </div>
++            {% endif %}
++        </div>
++    {% endif %}
++{% endblock %}
+\ No newline at end of file
+diff --git a/counters/urls.py b/counters/urls.py
+new file mode 100644
+index 0000000..c431904
+--- /dev/null
++++ b/counters/urls.py
+@@ -0,0 +1,10 @@
++from django.urls import path
++from . import views
++
++urlpatterns = [
++    path('', views.counter_dashboard, name='counter-dashboard'),
++    path('call-next/', views.call_next, name='counter-call-next'),
++    path('recall/', views.recall, name='counter-recall'),
++    path('no-show/', views.no_show, name='counter-no-show'),
++    path('complete/', views.complete, name='counter-complete'),
++]
+\ No newline at end of file
+diff --git a/counters/views.py b/counters/views.py
+index 91ea44a..b65966d 100644
+--- a/counters/views.py
++++ b/counters/views.py
+@@ -1,3 +1,155 @@
+-from django.shortcuts import render
++from django.shortcuts import render, redirect
++from django.contrib.auth.decorators import login_required
++from django.utils import timezone
++from django.contrib import messages
++from .models import Counter
++from queueing.models import Ticket
+ 
+-# Create your views here.
++
++def staff_required(view_func):
++    def wrapper(request, *args, **kwargs):
++        if not request.user.is_authenticated or not request.user.is_staff_member:
++            messages.error(request, 'Access denied. Staff only.')
++            return redirect('login')
++        return view_func(request, *args, **kwargs)
++    return wrapper
++
++
++@login_required
++@staff_required
++def counter_dashboard(request):
++    counter        = Counter.objects.filter(
++        staff=request.user,
++        status=Counter.Status.OPEN
++    ).first()
++
++    current_ticket  = None
++    waiting_tickets = []
++
++    if counter:
++        current_ticket = Ticket.objects.filter(
++            counter=counter,
++            status=Ticket.Status.SERVING
++        ).first()
++
++        waiting_tickets = Ticket.objects.filter(
++            branch=counter.branch,
++            service=counter.service,
++            status=Ticket.Status.WAITING
++        )
++
++    context = {
++        'counter':         counter,
++        'current_ticket':  current_ticket,
++        'waiting_tickets': waiting_tickets,
++    }
++    return render(request, 'counters/dashboard.html', context)
++
++
++@login_required
++@staff_required
++def call_next(request):
++    if request.method == 'POST':
++        counter = Counter.objects.filter(
++            staff=request.user,
++            status=Counter.Status.OPEN
++        ).first()
++
++        if not counter:
++            messages.error(request, 'No open counter assigned to you.')
++            return redirect('counter-dashboard')
++
++        # Complete current serving ticket first
++        Ticket.objects.filter(
++            counter=counter,
++            status=Ticket.Status.SERVING
++        ).update(status=Ticket.Status.COMPLETED)
++
++        # Get next ticket by priority then created_at
++        next_ticket = Ticket.objects.filter(
++            branch=counter.branch,
++            service=counter.service,
++            status=Ticket.Status.WAITING
++        ).first()
++
++        if next_ticket:
++            next_ticket.status    = Ticket.Status.SERVING
++            next_ticket.counter   = counter
++            next_ticket.called_at = timezone.now()
++            next_ticket.save()
++            messages.success(request, f'Now serving {next_ticket.ticket_number}')
++        else:
++            messages.info(request, 'No tickets waiting.')
++
++    return redirect('counter-dashboard')
++
++
++@login_required
++@staff_required
++def recall(request):
++    if request.method == 'POST':
++        counter = Counter.objects.filter(
++            staff=request.user,
++            status=Counter.Status.OPEN
++        ).first()
++
++        if counter:
++            current_ticket = Ticket.objects.filter(
++                counter=counter,
++                status=Ticket.Status.SERVING
++            ).first()
++
++            if current_ticket:
++                current_ticket.called_at = timezone.now()
++                current_ticket.save()
++                messages.success(request, f'Recalled {current_ticket.ticket_number}')
++            else:
++                messages.info(request, 'No ticket currently being served.')
++
++    return redirect('counter-dashboard')
++
++
++@login_required
++@staff_required
++def no_show(request):
++    if request.method == 'POST':
++        counter = Counter.objects.filter(
++            staff=request.user,
++            status=Counter.Status.OPEN
++        ).first()
++
++        if counter:
++            current_ticket = Ticket.objects.filter(
++                counter=counter,
++                status=Ticket.Status.SERVING
++            ).first()
++
++            if current_ticket:
++                current_ticket.status = Ticket.Status.NO_SHOW
++                current_ticket.save()
++                messages.success(request, f'Marked {current_ticket.ticket_number} as no show.')
++
++    return redirect('counter-dashboard')
++
++
++@login_required
++@staff_required
++def complete(request):
++    if request.method == 'POST':
++        counter = Counter.objects.filter(
++            staff=request.user,
++            status=Counter.Status.OPEN
++        ).first()
++
++        if counter:
++            current_ticket = Ticket.objects.filter(
++                counter=counter,
++                status=Ticket.Status.SERVING
++            ).first()
++
++            if current_ticket:
++                current_ticket.status = Ticket.Status.COMPLETED
++                current_ticket.save()
++                messages.success(request, f'{current_ticket.ticket_number} completed.')
++
++    return redirect('counter-dashboard')
+\ No newline at end of file
+diff --git a/queueing/forms.py b/queueing/forms.py
+new file mode 100644
+index 0000000..082a568
+--- /dev/null
++++ b/queueing/forms.py
+@@ -0,0 +1,71 @@
++from django import forms
++from branches.models import Branch
++from services.models import Service
++from .models import Ticket
++
++
++class GetTicketForm(forms.Form):
++    branch = forms.ModelChoiceField(
++        queryset=Branch.objects.filter(is_active=True),
++        empty_label='Select a Branch',
++        widget=forms.Select(attrs={
++            "hx-get": "/ajax/load-services/",
++            "hx-target": "#id_service",
++            "hx-trigger": "change",
++            "hx-include": "[name='branch']",
++        })
++    )
++
++    service = forms.ModelChoiceField(
++        queryset=Service.objects.none(),
++        empty_label='Select a Service',
++        widget=forms.Select(attrs={
++            "id": "id_service"   # 👈 important for HTMX target
++        })
++    )
++
++    client_type = forms.ChoiceField(
++        choices=Ticket.ClientType.choices
++    )
++
++    def __init__(self, *args, **kwargs):
++        super().__init__(*args, **kwargs)
++
++        # 👇 KEEP THIS (very important for POST validation)
++        if 'branch' in self.data:
++            try:
++                branch_id = int(self.data.get('branch'))
++                self.fields['service'].queryset = Service.objects.filter(
++                    branch_id=branch_id,
++                    is_active=True
++                )
++            except (ValueError, TypeError):
++                pass
++
++class PreRegisterForm(forms.Form):
++    branch      = forms.ModelChoiceField(
++        queryset=Branch.objects.filter(is_active=True),
++        empty_label='Select a Branch'
++    )
++    service     = forms.ModelChoiceField(
++        queryset=Service.objects.none(),
++        empty_label='Select a Service'
++    )
++    client_type = forms.ChoiceField(
++        choices=Ticket.ClientType.choices
++    )
++    scheduled_date = forms.DateField(
++        widget=forms.DateInput(attrs={'type': 'date'})
++    )
++
++    def __init__(self, *args, **kwargs):
++        super().__init__(*args, **kwargs)
++        if 'branch' in self.data:
++            try:
++                branch_id = int(self.data.get('branch'))
++                self.fields['service'].queryset = Service.objects.filter(
++                    branch_id=branch_id,
++                    is_active=True
++                )
++            except (ValueError, TypeError):
++                pass
+\ No newline at end of file
+diff --git a/queueing/services.py b/queueing/services.py
+new file mode 100644
+index 0000000..c2b0dcc
+--- /dev/null
++++ b/queueing/services.py
+@@ -0,0 +1,44 @@
++from django.db import transaction
++from .models import Ticket
++from branches.models import Branch
++from services.models import Service
++
++
++def generate_ticket_number(service: Service, branch: Branch) -> str:
++    last_ticket = Ticket.objects.filter(
++        branch=branch,
++        service=service,
++    ).order_by('-created_at').first()
++
++    if last_ticket:
++        last_number = int(last_ticket.ticket_number.split('-')[1])
++        new_number  = last_number + 1
++    else:
++        new_number = 1
++
++    return f"{service.prefix}-{str(new_number).zfill(3)}"
++
++
++@transaction.atomic
++def create_ticket(
++    *,
++    branch: Branch,
++    service: Service,
++    client_type: str,
++    client=None,
++    is_pre_registered: bool = False
++) -> Ticket:
++    ticket_number = generate_ticket_number(service=service, branch=branch)
++
++    ticket = Ticket(
++        branch=branch,
++        service=service,
++        client=client,
++        ticket_number=ticket_number,
++        client_type=client_type,
++        is_pre_registered=is_pre_registered,
++    )
++    ticket.full_clean()
++    ticket.save()
++
++    return ticket
+\ No newline at end of file
+diff --git a/queueing/templates/queueing/get_ticket.html b/queueing/templates/queueing/get_ticket.html
+new file mode 100644
+index 0000000..abdc5c8
+--- /dev/null
++++ b/queueing/templates/queueing/get_ticket.html
+@@ -0,0 +1,36 @@
++{% extends 'base.html' %}
++
++{% block content %}
++    <div class="bg-white rounded-lg shadow-sm p-8">
++        <h1 class="text-2xl font-bold mb-2">Get a Queue Ticket</h1>
++        <p class="text-slate-500 mb-6">Select your branch, service and client type.</p>
++
++        <form method="POST">
++            {% csrf_token %}
++            {% for field in form %}
++                <div class="mb-4">
++                    <label class="block font-semibold mb-1 text-slate-700">
++                        {{ field.label }}
++                    </label>
++                    {{ field }}
++                    {% if field.help_text %}
++                        <p class="text-xs text-slate-400 mt-1">{{ field.help_text }}</p>
++                    {% endif %}
++                    {% if field.errors %}
++                        <p class="text-red-500 text-sm mt-1">{{ field.errors }}</p>
++                    {% endif %}
++                </div>
++            {% endfor %}
++            <div class="flex gap-3 mt-6">
++                <button type="submit"
++                    class="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 transition font-semibold">
++                    Get Ticket
++                </button>
++                <a href="{% url 'home' %}"
++                    class="bg-slate-200 text-slate-700 px-4 py-2 rounded hover:bg-slate-300 transition">
++                    Cancel
++                </a>
++            </div>
++        </form>
++    </div>
++{% endblock %}
+\ No newline at end of file
+diff --git a/queueing/templates/queueing/home.html b/queueing/templates/queueing/home.html
+new file mode 100644
+index 0000000..8877267
+--- /dev/null
++++ b/queueing/templates/queueing/home.html
+@@ -0,0 +1,40 @@
++{% extends 'base.html' %}
++
++{% block content %}
++    <div class="text-center mb-10">
++        <h1 class="text-3xl font-bold mb-2">Welcome to Linia</h1>
++        <p class="text-slate-500">Fast and easy queue management</p>
++    </div>
++
++    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-10">
++        <a href="{% url 'get-ticket' %}"
++           class="bg-white rounded-lg shadow-sm p-8 text-center hover:shadow-md transition">
++            <div class="text-4xl mb-4">🎫</div>
++            <h2 class="text-xl font-bold mb-2">Get a Ticket</h2>
++            <p class="text-slate-500 text-sm">Walk in and get a queue ticket instantly</p>
++        </a>
++        <a href="{% url 'pre-register' %}"
++           class="bg-white rounded-lg shadow-sm p-8 text-center hover:shadow-md transition">
++            <div class="text-4xl mb-4">📋</div>
++            <h2 class="text-xl font-bold mb-2">Pre-Register</h2>
++            <p class="text-slate-500 text-sm">Register online and skip the wait</p>
++        </a>
++    </div>
++
++    {% if branches %}
++        <div class="bg-white rounded-lg shadow-sm p-6">
++            <h2 class="text-lg font-bold mb-4">Available Branches</h2>
++            <div class="space-y-2">
++                {% for branch in branches %}
++                    <div class="flex items-center gap-3 p-3 bg-slate-50 rounded">
++                        <span class="text-green-500">●</span>
++                        <div>
++                            <p class="font-semibold">{{ branch.name }}</p>
++                            <p class="text-sm text-slate-500">{{ branch.address }}</p>
++                        </div>
++                    </div>
++                {% endfor %}
++            </div>
++        </div>
++    {% endif %}
++{% endblock %}
+\ No newline at end of file
+diff --git a/queueing/templates/queueing/partials/service_options.html b/queueing/templates/queueing/partials/service_options.html
+new file mode 100644
+index 0000000..8b2453b
+--- /dev/null
++++ b/queueing/templates/queueing/partials/service_options.html
+@@ -0,0 +1,4 @@
++<option value="">Select a Service</option>
++{% for service in services %}
++    <option value="{{ service.id }}">{{ service.name }}</option>
++{% endfor %}
+\ No newline at end of file
+diff --git a/queueing/templates/queueing/pre_register.html b/queueing/templates/queueing/pre_register.html
+new file mode 100644
+index 0000000..14f9922
+--- /dev/null
++++ b/queueing/templates/queueing/pre_register.html
+@@ -0,0 +1,36 @@
++{% extends 'base.html' %}
++
++{% block content %}
++    <div class="bg-white rounded-lg shadow-sm p-8">
++        <h1 class="text-2xl font-bold mb-2">Pre-Register</h1>
++        <p class="text-slate-500 mb-6">Register online and get your ticket in advance.</p>
++
++        <form method="POST">
++            {% csrf_token %}
++            {% for field in form %}
++                <div class="mb-4">
++                    <label class="block font-semibold mb-1 text-slate-700">
++                        {{ field.label }}
++                    </label>
++                    {{ field }}
++                    {% if field.help_text %}
++                        <p class="text-xs text-slate-400 mt-1">{{ field.help_text }}</p>
++                    {% endif %}
++                    {% if field.errors %}
++                        <p class="text-red-500 text-sm mt-1">{{ field.errors }}</p>
++                    {% endif %}
++                </div>
++            {% endfor %}
++            <div class="flex gap-3 mt-6">
++                <button type="submit"
++                    class="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 transition font-semibold">
++                    Pre-Register
++                </button>
++                <a href="{% url 'home' %}"
++                    class="bg-slate-200 text-slate-700 px-4 py-2 rounded hover:bg-slate-300 transition">
++                    Cancel
++                </a>
++            </div>
++        </form>
++    </div>
++{% endblock %}
+\ No newline at end of file
+diff --git a/queueing/templates/queueing/ticket_status.html b/queueing/templates/queueing/ticket_status.html
+new file mode 100644
+index 0000000..1a2d85b
+--- /dev/null
++++ b/queueing/templates/queueing/ticket_status.html
+@@ -0,0 +1,84 @@
++{% extends 'base.html' %}
++
++{% block content %}
++    <div class="bg-white rounded-lg shadow-sm p-8 text-center">
++
++        <h1 class="text-2xl font-bold mb-6">Your Ticket</h1>
++
++        <!-- Ticket Number -->
++        <div class="bg-blue-50 rounded-lg p-8 mb-6">
++            <p class="text-slate-500 text-sm mb-2">Ticket Number</p>
++            <p class="text-6xl font-bold text-blue-600">
++                {{ ticket.ticket_number }}
++            </p>
++        </div>
++
++        <!-- Ticket Details -->
++        <div class="grid grid-cols-2 gap-4 mb-6 text-left">
++            <div class="bg-slate-50 rounded p-4">
++                <p class="text-xs text-slate-400 mb-1">Branch</p>
++                <p class="font-semibold">{{ ticket.branch.name }}</p>
++            </div>
++            <div class="bg-slate-50 rounded p-4">
++                <p class="text-xs text-slate-400 mb-1">Service</p>
++                <p class="font-semibold">{{ ticket.service.name }}</p>
++            </div>
++            <div class="bg-slate-50 rounded p-4">
++                <p class="text-xs text-slate-400 mb-1">Client Type</p>
++                <p class="font-semibold">{{ ticket.get_client_type_display }}</p>
++            </div>
++            <div class="bg-slate-50 rounded p-4">
++                <p class="text-xs text-slate-400 mb-1">Status</p>
++                <p class="font-semibold
++                    {% if ticket.status == 'waiting' %}text-amber-500
++                    {% elif ticket.status == 'serving' %}text-green-500
++                    {% elif ticket.status == 'completed' %}text-slate-400
++                    {% else %}text-red-500{% endif %}">
++                    {{ ticket.get_status_display }}
++                </p>
++            </div>
++        </div>
++
++        <!-- Waiting Ahead -->
++        {% if ticket.status == 'waiting' %}
++            <div class="bg-amber-50 rounded-lg p-4 mb-6">
++                <p class="text-amber-700 font-semibold">
++                    {{ waiting_ahead }} person{{ waiting_ahead|pluralize }}
++                    ahead of you
++                </p>
++            </div>
++        {% elif ticket.status == 'serving' %}
++            <div class="bg-green-50 rounded-lg p-4 mb-6">
++                <p class="text-green-700 font-semibold">
++                    🎉 It's your turn! Please proceed to
++                    Counter {{ ticket.counter.number }}
++                </p>
++            </div>
++        {% elif ticket.status == 'completed' %}
++            <div class="bg-slate-50 rounded-lg p-4 mb-6">
++                <p class="text-slate-500">
++                    Your transaction has been completed. Thank you!
++                </p>
++            </div>
++        {% elif ticket.status == 'no_show' %}
++            <div class="bg-red-50 rounded-lg p-4 mb-6">
++                <p class="text-red-500">
++                    Your ticket was marked as no show.
++                </p>
++            </div>
++        {% endif %}
++
++        <div class="flex gap-3 justify-center">
++            <a href="{% url 'home' %}"
++               class="bg-slate-200 text-slate-700 px-4 py-2 rounded hover:bg-slate-300 transition">
++                Back to Home
++            </a>
++            {% if ticket.status == 'waiting' %}
++                <a href="{% url 'ticket-status' ticket.pk %}"
++                   class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition">
++                    Refresh Status
++                </a>
++            {% endif %}
++        </div>
++    </div>
++{% endblock %}
+diff --git a/queueing/urls.py b/queueing/urls.py
+new file mode 100644
+index 0000000..91f8660
+--- /dev/null
++++ b/queueing/urls.py
+@@ -0,0 +1,10 @@
++from django.urls import path
++from . import views
++
++urlpatterns = [
++    path('', views.home, name='home'),
++    path('get-ticket/', views.get_ticket, name='get-ticket'),
++    path('pre-register/', views.pre_register, name='pre-register'),
++    path('ticket/<int:pk>/status/', views.ticket_status, name='ticket-status'),
++    path('ajax/load-services/', views.load_services, name='load-services'),
++]
+\ No newline at end of file
+diff --git a/queueing/views.py b/queueing/views.py
+index 91ea44a..de2765a 100644
+--- a/queueing/views.py
++++ b/queueing/views.py
+@@ -1,3 +1,83 @@
+-from django.shortcuts import render
++from django.shortcuts import render, redirect, get_object_or_404
++from django.contrib import messages
++from django.contrib.auth.decorators import login_required
++from .models import Ticket
++from .forms import GetTicketForm, PreRegisterForm
++from .services import create_ticket
++from branches.models import Branch
++from services.models import Service
+ 
+-# Create your views here.
++
++def home(request):
++    branches = Branch.objects.filter(is_active=True)
++    return render(request, 'queueing/home.html', {'branches': branches})
++
++
++def get_ticket(request):
++    if request.method == 'POST':
++        form = GetTicketForm(request.POST)
++        if form.is_valid():
++            ticket = create_ticket(
++                branch=form.cleaned_data['branch'],
++                service=form.cleaned_data['service'],
++                client_type=form.cleaned_data['client_type'],
++                client=request.user if request.user.is_authenticated else None,
++            )
++            messages.success(request, f'Your ticket number is {ticket.ticket_number}')
++            return redirect('ticket-status', pk=ticket.pk)
++    else:
++        form = GetTicketForm()
++
++    return render(request, 'queueing/get_ticket.html', {'form': form})
++
++# views.py
++from django.http import HttpResponse
++from services.models import Service
++
++def load_services(request):
++    branch_id = request.GET.get('branch')
++
++    services = Service.objects.filter(
++        branch_id=branch_id,
++        is_active=True
++    )
++
++    return render(request, 'queueing/partials/service_options.html', {
++        'services': services
++    })
++
++def pre_register(request):
++    if request.method == 'POST':
++        form = PreRegisterForm(request.POST)
++        if form.is_valid():
++            ticket = create_ticket(
++                branch=form.cleaned_data['branch'],
++                service=form.cleaned_data['service'],
++                client_type=form.cleaned_data['client_type'],
++                client=request.user if request.user.is_authenticated else None,
++                is_pre_registered=True,
++            )
++            messages.success(request, f'Pre-registration successful! Your ticket is {ticket.ticket_number}')
++            return redirect('ticket-status', pk=ticket.pk)
++    else:
++        form = PreRegisterForm()
++
++    return render(request, 'queueing/pre_register.html', {'form': form})
++
++
++def ticket_status(request, pk):
++    ticket = get_object_or_404(Ticket, pk=pk)
++
++    waiting_ahead = Ticket.objects.filter(
++        branch=ticket.branch,
++        service=ticket.service,
++        status=Ticket.Status.WAITING,
++        priority__lte=ticket.priority,
++        created_at__lt=ticket.created_at
++    ).count()
++
++    context = {
++        'ticket':        ticket,
++        'waiting_ahead': waiting_ahead,
++    }
++    return render(request, 'queueing/ticket_status.html', context)
+diff --git a/static/css/style.css b/static/css/style.css
+new file mode 100644
+index 0000000..27014e2
+--- /dev/null
++++ b/static/css/style.css
+@@ -0,0 +1,22 @@
++input[type="text"],
++input[type="password"],
++input[type="email"],
++textarea,
++select {
++    width: 100%;
++    border: 1px solid #cbd5e1;
++    border-radius: 6px;
++    padding: 8px 12px;
++    font-size: 14px;
++    color: #1e293b;
++    outline: none;
++}
++
++input[type="text"]:focus,
++input[type="password"]:focus,
++input[type="email"]:focus,
++textarea:focus,
++select:focus {
++    border-color: #2563eb;
++    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
++}
+\ No newline at end of file
+diff --git a/templates/base.html b/templates/base.html
+new file mode 100644
+index 0000000..e1ca595
+--- /dev/null
++++ b/templates/base.html
+@@ -0,0 +1,44 @@
++{% load static %}
++<!DOCTYPE html>
++<html lang="en">
++<head>
++    <meta charset="UTF-8">
++    <meta name="viewport" content="width=device-width, initial-scale=1.0">
++    <title>Linia - Queue System</title>
++    <script src="https://cdn.tailwindcss.com"></script>
++    <link rel="stylesheet" href="{% static 'css/style.css' %}">
++    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
++</head>
++<body class="bg-slate-100 text-slate-800 min-h-screen">
++    <nav class="bg-blue-600 px-8 py-4 flex justify-between items-center">
++        <div class="text-white text-xl font-bold">🎫 Linia</div>
++        <div class="flex items-center gap-4 text-sm">
++            {% if request.user.is_authenticated %}
++                <span class="text-white">👋 {{ request.user.username }}</span>
++                <form method="POST" action="{% url 'logout' %}">
++                    {% csrf_token %}
++                    <button type="submit" class="border border-white text-white px-3 py-1 rounded hover:bg-white hover:text-blue-600 transition">
++                        Logout
++                    </button>
++                </form>
++            {% else %}
++                <a href="{% url 'login' %}" class="text-white hover:underline">Login</a>
++            {% endif %}
++        </div>
++    </nav>
++    <div class="max-w-4xl mx-auto mt-10 px-4">
++        {% if messages %}
++            {% for message in messages %}
++                <div class="mb-4 p-4 rounded-lg
++                    {% if message.tags  == 'success' %}bg-green-100 text-green-800
++                    {% elif message.tags == 'error' %}bg-red-100 text-red-800
++                    {% else %}bg-blue-100 text-blue-800{% endif %}">
++                    {{ message }}
++                </div>
++            {% endfor %}
++        {% endif %}
++        {% block content %}
++        {% endblock %}
++    </div>
++</body>
++</html>
+\ No newline at end of file
