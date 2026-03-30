@@ -5,14 +5,18 @@ from services.models import Service
 
 
 def generate_ticket_number(service: Service, branch: Branch) -> str:
-    last_ticket = Ticket.objects.filter(
-        branch=branch,
-        service=service,
-    ).order_by('-created_at').first()
+    last_ticket = (
+        Ticket.objects.filter(
+            branch=branch,
+            service=service,
+        )
+        .order_by("-created_at")
+        .first()
+    )
 
     if last_ticket:
-        last_number = int(last_ticket.ticket_number.split('-')[1])
-        new_number  = last_number + 1
+        last_number = int(last_ticket.ticket_number.split("-")[1])
+        new_number = last_number + 1
     else:
         new_number = 1
 
@@ -26,7 +30,7 @@ def create_ticket(
     service: Service,
     client_type: str,
     client=None,
-    is_pre_registered: bool = False
+    is_pre_registered: bool = False,
 ) -> Ticket:
     ticket_number = generate_ticket_number(service=service, branch=branch)
 
