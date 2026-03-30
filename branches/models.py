@@ -5,9 +5,9 @@ from django.db import models
 
 
 class Branch(models.Model):
-    name       = models.CharField(max_length=100)
-    address    = models.TextField()
-    is_active  = models.BooleanField(default=True)
+    name = models.CharField(max_length=100)
+    address = models.TextField()
+    is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -15,5 +15,5 @@ class Branch(models.Model):
         return self.name
 
     class Meta:
-        verbose_name_plural = 'Branches'
-        ordering = ['name']
+        verbose_name_plural = "Branches"
+        ordering = ["name"]

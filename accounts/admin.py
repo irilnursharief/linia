@@ -8,9 +8,9 @@ from .models import User
 
 @admin.register(User)
 class CustomUserAdmin(UserAdmin):
-    list_display  = ['username', 'email', 'role', 'branch', 'is_active']
-    list_filter   = ['role', 'branch', 'is_active']
-    search_fields = ['username', 'email']
-    fieldsets     = UserAdmin.fieldsets + (
-        ('Role & Branch', {'fields': ('role', 'branch')}),
+    list_display = ["username", "email", "role", "branch", "is_active"]
+    list_filter = ["role", "branch", "is_active"]
+    search_fields = ["username", "email"]
+    fieldsets = UserAdmin.fieldsets + (
+        ("Role & Branch", {"fields": ("role", "branch")}),
     )

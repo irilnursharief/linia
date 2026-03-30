@@ -7,21 +7,17 @@ from django.db import models
 
 class User(AbstractUser):
     class Role(models.TextChoices):
-        ADMIN  = 'admin',  'Admin'
-        STAFF  = 'staff',  'Staff'
-        CLIENT = 'client', 'Client'
+        ADMIN = "admin", "Admin"
+        STAFF = "staff", "Staff"
+        CLIENT = "client", "Client"
 
-    role   = models.CharField(
-        max_length=10,
-        choices=Role.choices,
-        default=Role.CLIENT
-    )
+    role = models.CharField(max_length=10, choices=Role.choices, default=Role.CLIENT)
     branch = models.ForeignKey(
-        'branches.Branch',
+        "branches.Branch",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name='users'
+        related_name="users",
     )
 
     def __str__(self):
