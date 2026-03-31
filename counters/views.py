@@ -4,20 +4,26 @@ from django.utils import timezone
 from django.contrib import messages
 from .models import Counter
 from queueing.models import Ticket
+from accounts.decorators import role_required
 
+# def staff_required(view_func):
+#     def wrapper(request, *args, **kwargs):
+#         if not request.user.is_authenticated or not request.user.is_staff_member:
+#             messages.error(request, "Access denied. Staff only.")
+#             return redirect("login")
+#         return view_func(request, *args, **kwargs)
 
-def staff_required(view_func):
-    def wrapper(request, *args, **kwargs):
-        if not request.user.is_authenticated or not request.user.is_staff_member:
-            messages.error(request, "Access denied. Staff only.")
-            return redirect("login")
-        return view_func(request, *args, **kwargs)
-
-    return wrapper
+#     return wrapper
 
 
 @login_required
-@staff_required
+@role_required("staff")
+def counter_select(request):
+    return render(request, "counters/counter_select.html", {})
+
+
+@login_required
+@role_required("staff")
 def counter_dashboard(request):
     counter = Counter.objects.filter(
         staff=request.user, status=Counter.Status.OPEN
@@ -44,7 +50,7 @@ def counter_dashboard(request):
 
 
 @login_required
-@staff_required
+@role_required("staff")
 def call_next(request):
     if request.method == "POST":
         counter = Counter.objects.filter(
@@ -78,7 +84,7 @@ def call_next(request):
 
 
 @login_required
-@staff_required
+@role_required("staff")
 def recall(request):
     if request.method == "POST":
         counter = Counter.objects.filter(
@@ -101,7 +107,7 @@ def recall(request):
 
 
 @login_required
-@staff_required
+@role_required("staff")
 def no_show(request):
     if request.method == "POST":
         counter = Counter.objects.filter(
@@ -124,7 +130,7 @@ def no_show(request):
 
 
 @login_required
-@staff_required
+@role_required("staff")
 def complete(request):
     if request.method == "POST":
         counter = Counter.objects.filter(

@@ -7,13 +7,16 @@ from .services import create_ticket
 from branches.models import Branch
 from services.models import Service
 from django.http import HttpResponse
+from accounts.decorators import role_required
 
 
+@role_required("ticketing")
 def home(request):
     branches = Branch.objects.filter(is_active=True)
     return render(request, "queueing/home.html", {"branches": branches})
 
 
+@role_required("ticketing")
 def get_ticket(request):
     if request.method == "POST":
         form = GetTicketForm(request.POST)
@@ -42,6 +45,7 @@ def load_services(request):
     )
 
 
+@role_required("ticketing")
 def pre_register(request):
     if request.method == "POST":
         form = PreRegisterForm(request.POST)
