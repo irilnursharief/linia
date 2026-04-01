@@ -1,78 +1,153 @@
-{% extends 'base.html' %}
+{% extends 'counters/base_staff.html' %}
+
+{% block header_title %}
+    <h1 class="text-lg font-bold">Counter Dashboard</h1>
+    <p class="text-sm text-slate-500 mt-0.5">
+        Counter {{ counter.number }} — {{ counter.service.name }}
+    </p>
+{% endblock %}
 
 {% block content %}
-    <div class="mb-6">
-        <h1 class="text-2xl font-bold">Counter Dashboard</h1>
-        {% if counter %}
-            <p class="text-slate-500 mt-1">Counter {{ counter.number }} — {{ counter.service.name }}</p>
-        {% else %}
-            <p class="text-red-500 mt-1">No open counter assigned to you.</p>
-        {% endif %}
+
+    <!-- Switch Service -->
+    <div class="bg-white rounded-lg shadow-sm p-4 mb-6">
+        <h2 class="text-xs font-bold text-slate-400 uppercase mb-3">
+            Switch Service
+        </h2>
+        <div class="flex flex-wrap gap-2">
+            {% for service in branch_services %}
+                <form method="POST">
+                    {% csrf_token %}
+                    <input type="hidden" name="switch_service" value="1">
+                    <input type="hidden" name="service_id" value="{{ service.id }}">
+                    <button type="submit"
+                        class="px-3 py-1 rounded text-sm font-semibold transition
+                        {% if service == counter.service %}
+                            bg-blue-600 text-white
+                        {% else %}
+                            bg-slate-100 text-slate-600 hover:bg-slate-200
+                        {% endif %}">
+                        {{ service.name }}
+                    </button>
+                </form>
+            {% endfor %}
+        </div>
     </div>
 
-    {% if counter %}
-        <!-- Current Ticket -->
-        <div class="bg-white rounded-lg shadow-sm p-6 mb-6">
-            <h2 class="text-lg font-bold mb-4">Now Serving</h2>
+    <!-- Now Serving -->
+    <div class="bg-white rounded-lg shadow-sm p-6 mb-6">
+        <div class="flex justify-between items-center mb-4">
+            <h2 class="text-lg font-bold">Now Serving</h2>
             {% if current_ticket %}
-                <div class="text-center">
-                    <p class="text-5xl font-bold text-blue-600 mb-2">
-                        {{ current_ticket.ticket_number }}
-                    </p>
-                    <p class="text-slate-500">{{ current_ticket.get_client_type_display }}</p>
+                <div class="flex items-center gap-2">
+                    <span class="text-slate-400 text-sm">Elapsed:</span>
+                    <span id="live-timer"
+                          class="font-mono font-bold text-blue-600 text-sm bg-blue-50 px-3 py-1 rounded"
+                          data-called-at="{{ current_ticket.called_at.isoformat }}">
+                        00:00
+                    </span>
                 </div>
-                <div class="flex gap-3 mt-6 justify-center">
-                    <form method="POST" action="{% url 'counter-recall' %}">
-                        {% csrf_token %}
-                        <button type="submit" class="bg-amber-400 text-white px-4 py-2 rounded hover:bg-amber-500 transition">
-                            Recall
-                        </button>
-                    </form>
-                    <form method="POST" action="{% url 'counter-no-show' %}">
-                        {% csrf_token %}
-                        <button type="submit" class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 transition">
-                            No Show
-                        </button>
-                    </form>
-                    <form method="POST" action="{% url 'counter-complete' %}">
-                        {% csrf_token %}
-                        <button type="submit" class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 transition">
-                            Complete
-                        </button>
-                    </form>
-                </div>
-            {% else %}
-                <p class="text-slate-400 text-center">No ticket currently being served.</p>
             {% endif %}
         </div>
 
-        <!-- Call Next -->
-        <div class="bg-white rounded-lg shadow-sm p-6 mb-6">
-            <div class="flex justify-between items-center">
-                <div>
-                    <h2 class="text-lg font-bold">Waiting Queue</h2>
-                    <p class="text-slate-500 text-sm mt-1">
-                        {{ waiting_tickets.count }} ticket{{ waiting_tickets.count|pluralize }} waiting
-                    </p>
-                </div>
-                <form method="POST" action="{% url 'counter-call-next' %}">
+        {% if current_ticket %}
+            <div class="text-center py-4">
+                <p class="text-6xl font-bold text-blue-600 mb-2">
+                    {{ current_ticket.ticket_number }}
+                </p>
+                <p class="text-slate-500">
+                    {{ current_ticket.get_client_type_display }}
+                </p>
+            </div>
+            <div class="flex gap-3 mt-6 justify-center">
+                <form method="POST" action="{% url 'counter-recall' %}">
                     {% csrf_token %}
-                    <button type="submit" class="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 transition font-semibold">
-                        Call Next
+                    <button type="submit"
+                        class="bg-amber-400 text-white px-4 py-2 rounded hover:bg-amber-500 transition">
+                        🔁 Recall
+                    </button>
+                </form>
+                <form method="POST" action="{% url 'counter-no-show' %}">
+                    {% csrf_token %}
+                    <button type="submit"
+                        class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 transition">
+                        ❌ No Show
+                    </button>
+                </form>
+                <form method="POST" action="{% url 'counter-complete' %}">
+                    {% csrf_token %}
+                    <button type="submit"
+                        class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 transition">
+                        ✅ Complete
                     </button>
                 </form>
             </div>
+        {% else %}
+            <p class="text-slate-400 text-center py-6">
+                No ticket currently being served.
+            </p>
+        {% endif %}
+    </div>
 
-            {% if waiting_tickets %}
-                <div class="mt-4 space-y-2">
-                    {% for ticket in waiting_tickets %}
-                        <div class="flex justify-between items-center p-3 bg-slate-50 rounded">
-                            <span class="font-semibold">{{ ticket.ticket_number }}</span>
-                            <span class="text-sm text-slate-500">{{ ticket.get_client_type_display }}</span>
-                        </div>
-                    {% endfor %}
-                </div>
-            {% endif %}
+    <!-- Waiting Queue -->
+    <div class="bg-white rounded-lg shadow-sm p-6">
+        <div class="flex justify-between items-center mb-4">
+            <div>
+                <h2 class="text-lg font-bold">Waiting Queue</h2>
+                <p class="text-slate-500 text-sm mt-1">
+                    {{ waiting_tickets.count }}
+                    ticket{{ waiting_tickets.count|pluralize }} waiting
+                </p>
+            </div>
+            <form method="POST" action="{% url 'counter-call-next' %}">
+                {% csrf_token %}
+                <button type="submit"
+                    class="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 transition font-semibold">
+                    Call Next
+                </button>
+            </form>
         </div>
-    {% endif %}
+
+        {% if waiting_tickets %}
+            <div class="space-y-2">
+                {% for ticket in waiting_tickets %}
+                    <div class="flex justify-between items-center p-3 bg-slate-50 rounded">
+                        <span class="font-semibold">{{ ticket.ticket_number }}</span>
+                        <span class="text-xs px-2 py-1 rounded font-medium
+                            {% if ticket.client_type == 'pwd' %}bg-purple-100 text-purple-700
+                            {% elif ticket.client_type == 'senior' %}bg-blue-100 text-blue-700
+                            {% elif ticket.client_type == 'pregnant' %}bg-pink-100 text-pink-700
+                            {% else %}bg-slate-100 text-slate-600{% endif %}">
+                            {{ ticket.get_client_type_display }}
+                        </span>
+                    </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <p class="text-slate-400 text-center py-4">No tickets waiting.</p>
+        {% endif %}
+    </div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Live timer for now serving
+    const timerEl = document.getElementById('live-timer');
+
+    if (timerEl) {
+        const calledAt = new Date(timerEl.dataset.calledAt);
+
+        function updateTimer() {
+            const now      = new Date();
+            const elapsed  = Math.floor((now - calledAt) / 1000);
+            const minutes  = Math.floor(elapsed / 60).toString().padStart(2, '0');
+            const seconds  = (elapsed % 60).toString().padStart(2, '0');
+            timerEl.textContent = `${minutes}:${seconds}`;
+        }
+
+        updateTimer();
+        setInterval(updateTimer, 1000);
+    }
+</script>
 {% endblock %}

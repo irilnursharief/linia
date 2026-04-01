@@ -54,14 +54,31 @@ class Ticket(models.Model):
     is_pre_registered = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     called_at = models.DateTimeField(null=True, blank=True)
+    served_at = models.DateTimeField(null=True, blank=True)
 
     def __str__(self):
         return f"{self.ticket_number} - {self.status}"
 
     def save(self, *args, **kwargs):
-        # Automatically set priority based on client type before saving
         self.priority = self.PRIORITY_MAP.get(self.client_type, 4)
         super().save(*args, **kwargs)
+
+    @property
+    def handling_time(self):
+        if self.called_at and self.served_at:
+            delta = self.served_at - self.called_at
+            total_seconds = int(delta.total_seconds())
+
+            hours = total_seconds // 3600
+            minutes = (total_seconds % 3600) // 60
+            seconds = total_seconds % 60
+
+            if hours > 0:
+                return f"{hours}h {minutes}m {seconds}s"
+            elif minutes > 0:
+                return f"{minutes}m {seconds}s"
+            return f"{seconds}s"
+        return None
 
     class Meta:
         ordering = ["priority", "created_at"]

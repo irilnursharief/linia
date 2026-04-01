@@ -8,4 +8,5 @@ urlpatterns = [
     path("recall/", views.recall, name="counter-recall"),
     path("no-show/", views.no_show, name="counter-no-show"),
     path("complete/", views.complete, name="counter-complete"),
+    path("reports/", views.counter_reports, name="counter-reports"),
 ]
