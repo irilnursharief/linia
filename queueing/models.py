@@ -55,6 +55,14 @@ class Ticket(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     called_at = models.DateTimeField(null=True, blank=True)
     served_at = models.DateTimeField(null=True, blank=True)
+    served_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="served_tickets",
+        db_index=True,
+    )
 
     def __str__(self):
         return f"{self.ticket_number} - {self.status}"

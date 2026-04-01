@@ -87,6 +87,7 @@ def call_next(request):
         if next_ticket:
             next_ticket.status = Ticket.Status.SERVING
             next_ticket.counter = counter
+            next_ticket.served_by = request.user
             next_ticket.called_at = timezone.now()
             next_ticket.save()
             messages.success(request, f"Now serving {next_ticket.ticket_number}")
@@ -224,7 +225,7 @@ def counter_select(request):
 def counter_reports(request):
     tickets = (
         Ticket.objects.filter(
-            counter__staff=request.user,
+            served_by=request.user,
             status=Ticket.Status.COMPLETED,
         )
         .select_related("service", "branch", "counter")
