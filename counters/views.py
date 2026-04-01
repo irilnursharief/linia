@@ -234,7 +234,8 @@ def counter_reports(request):
 
     client_type = request.GET.get("client_type", "")
     service_id = request.GET.get("service", "")
-    date_filter = request.GET.get("date", "")
+    start_date = request.GET.get("start_date", "")
+    end_date = request.GET.get("end_date", "")
 
     if client_type:
         tickets = tickets.filter(client_type=client_type)
@@ -242,12 +243,12 @@ def counter_reports(request):
     if service_id:
         tickets = tickets.filter(service__id=service_id)
 
-    if date_filter:
-        try:
-            filter_date = datetime.strptime(date_filter, "%Y-%m-%d").date()
-            tickets = tickets.filter(served_at__date=filter_date)
-        except ValueError:
-            pass
+    if start_date and end_date:
+        tickets = tickets.filter(served_at__date__range=[start_date, end_date])
+    elif start_date:
+        tickets = tickets.filter(served_at__date__gte=start_date)
+    elif end_date:
+        tickets = tickets.filter(served_at__date__lte=end_date)
 
     tickets_with_time = tickets.filter(
         called_at__isnull=False,
@@ -306,7 +307,8 @@ def counter_reports(request):
         "client_types": Ticket.ClientType.choices,
         "selected_client_type": client_type,
         "selected_service": service_id,
-        "selected_date": date_filter,
+        "start_date": start_date,
+        "end_date": end_date,
         "average_aht": average_aht,
     }
 
