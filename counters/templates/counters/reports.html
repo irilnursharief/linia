@@ -70,14 +70,21 @@
                 </select>
             </div>
 
-            <div>
-                <label class="block text-xs font-semibold text-slate-600 mb-1">
-                    Date
-                </label>
-                <input type="date" name="date"
-                    value="{{ selected_date }}"
-                    class="border border-slate-200 rounded px-3 py-2 text-sm">
+            <div class="flex gap-4">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-6500 mb-1">From</label>
+                    <input type="date" name="start_date"
+                        value="{{ start_date }}"
+                        class="border border-slate-200 rounded px-3 py-2 text-sm">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-6500 mb-1">To</label>
+                    <input type="date" name="end_date"
+                        value="{{ end_date }}"
+                        class="border border-slate-200 rounded px-3 py-2 text-sm">
+                </div>
             </div>
+
              <div>
                 <label class="block text-xs font-semibold text-slate-600 mb-1">
                     Rows
@@ -95,12 +102,13 @@
                 Apply Filters
             </button>
 
-            {% if selected_client_type or selected_service or selected_date %}
+            {% if selected_client_type or selected_service or start_date or end_date %}
                 <a href="{% url 'counter-reports' %}"
-                   class="bg-slate-200 text-slate-700 px-4 py-2 rounded text-sm hover:bg-slate-300 transition">
+                class="bg-slate-200 text-slate-700 px-4 py-2 rounded text-sm hover:bg-slate-300 transition">
                     Clear Filters
                 </a>
             {% endif %}
+            
         </form>
     </div>
 
