@@ -1,32 +1,33 @@
-from urllib import request
-
-from django.core import paginator
 from django.shortcuts import render, redirect
 from django.contrib.auth.decorators import login_required
 from django.utils import timezone
 from django.contrib import messages
+from django.db.models import F, ExpressionWrapper, DurationField, Avg
+from django.core.paginator import Paginator
+
 from .models import Counter
 from queueing.models import Ticket
 from accounts.decorators import role_required
 from services.models import Service
-from django.db.models import Avg, Count
-from datetime import datetime, date
-from django.core.paginator import Paginator
-from django.db.models import F, ExpressionWrapper, DurationField, Avg
 
 
 @login_required
 @role_required("staff")
 def counter_dashboard(request):
-    counter = Counter.objects.filter(
-        staff=request.user, status=Counter.Status.OPEN
-    ).first()
 
+    # Get branch and service info for the assigned counter
+    counter = (
+        Counter.objects.filter(staff=request.user, status=Counter.Status.OPEN)
+        .select_related("branch", "service")
+        .first()
+    )
+
+    # If no counter assigned, redirect to selection page
     if not counter:
         messages.warning(request, "Please select a counter first.")
         return redirect("counter-select")
 
-    # Handle service switch
+    # Handle service switching
     if request.method == "POST" and "switch_service" in request.POST:
         service_id = request.POST.get("service_id")
         service = Service.objects.filter(
@@ -38,9 +39,6 @@ def counter_dashboard(request):
             counter.save()
             messages.success(request, f"Switched to {service.name}")
         return redirect("counter-dashboard")
-
-    current_ticket = None
-    waiting_tickets = []
 
     current_ticket = Ticket.objects.filter(
         counter=counter, status=Ticket.Status.SERVING
@@ -65,10 +63,13 @@ def counter_dashboard(request):
 @login_required
 @role_required("staff")
 def call_next(request):
+    # Get the current staff's counter
     if request.method == "POST":
-        counter = Counter.objects.filter(
-            staff=request.user, status=Counter.Status.OPEN
-        ).first()
+        counter = (
+            Counter.objects.filter(staff=request.user, status=Counter.Status.OPEN)
+            .select_related("branch", "service")
+            .first()
+        )
 
         if not counter:
             messages.error(request, "No open counter assigned to you.")
@@ -76,7 +77,7 @@ def call_next(request):
 
         # Complete current serving ticket first
         Ticket.objects.filter(counter=counter, status=Ticket.Status.SERVING).update(
-            status=Ticket.Status.COMPLETED
+            status=Ticket.Status.COMPLETED, served_at=timezone.now()
         )
 
         # Get next ticket by priority then created_at
@@ -100,22 +101,29 @@ def call_next(request):
 @login_required
 @role_required("staff")
 def recall(request):
+    # Get the current staff's counter
     if request.method == "POST":
-        counter = Counter.objects.filter(
-            staff=request.user, status=Counter.Status.OPEN
+        counter = (
+            Counter.objects.filter(staff=request.user, status=Counter.Status.OPEN)
+            .select_related("branch", "service")
+            .first()
+        )
+
+        if not counter:
+            messages.error(request, "No open counter assigned to you.")
+            return redirect("counter-select")
+
+        current_ticket = Ticket.objects.filter(
+            counter=counter, status=Ticket.Status.SERVING
         ).first()
 
-        if counter:
-            current_ticket = Ticket.objects.filter(
-                counter=counter, status=Ticket.Status.SERVING
-            ).first()
-
-            if current_ticket:
-                current_ticket.called_at = timezone.now()
-                current_ticket.save()
-                messages.success(request, f"Recalled {current_ticket.ticket_number}")
-            else:
-                messages.info(request, "No ticket currently being served.")
+        if current_ticket:
+            # Update the call time so the TV display/audio knows to announce it again
+            current_ticket.called_at = timezone.now()
+            current_ticket.save()
+            messages.success(request, f"Recalled {current_ticket.ticket_number}")
+        else:
+            messages.info(request, "No ticket currently being served.")
 
     return redirect("counter-dashboard")
 
@@ -124,21 +132,30 @@ def recall(request):
 @role_required("staff")
 def no_show(request):
     if request.method == "POST":
+        # Using the clean multi-line format
         counter = Counter.objects.filter(
             staff=request.user, status=Counter.Status.OPEN
         ).first()
 
-        if counter:
-            current_ticket = Ticket.objects.filter(
-                counter=counter, status=Ticket.Status.SERVING
-            ).first()
+        # Safety check for the 'Ghost Tab' scenario
+        if not counter:
+            messages.error(request, "No open counter assigned to you.")
+            return redirect("counter-select")
 
-            if current_ticket:
-                current_ticket.status = Ticket.Status.NO_SHOW
-                current_ticket.save()
-                messages.success(
-                    request, f"Marked {current_ticket.ticket_number} as no show."
-                )
+        current_ticket = Ticket.objects.filter(
+            counter=counter, status=Ticket.Status.SERVING
+        ).first()
+
+        if current_ticket:
+            current_ticket.status = Ticket.Status.NO_SHOW
+            # No show doesn't necessarily need a served_at time,
+            # but it effectively ends the ticket's lifecycle.
+            current_ticket.save()
+            messages.success(
+                request, f"Marked {current_ticket.ticket_number} as no show."
+            )
+        else:
+            messages.info(request, "No ticket currently being served.")
 
     return redirect("counter-dashboard")
 
@@ -151,26 +168,32 @@ def complete(request):
             staff=request.user, status=Counter.Status.OPEN
         ).first()
 
-        if counter:
-            current_ticket = Ticket.objects.filter(
-                counter=counter, status=Ticket.Status.SERVING
-            ).first()
+        # Safety Net: Prevent crash if counter was closed elsewhere
+        if not counter:
+            messages.error(request, "No open counter assigned to you.")
+            return redirect("counter-select")
 
-            if current_ticket:
-                current_ticket.status = Ticket.Status.COMPLETED
-                current_ticket.served_at = timezone.now()  # ← add this
-                current_ticket.save()
+        current_ticket = Ticket.objects.filter(
+            counter=counter, status=Ticket.Status.SERVING
+        ).first()
 
-                if current_ticket.handling_time:
-                    messages.success(
-                        request,
-                        f"✅ {current_ticket.ticket_number} completed. "
-                        f"Handling time: {current_ticket.handling_time}",
-                    )
-                else:
-                    messages.success(
-                        request, f"{current_ticket.ticket_number} completed."
-                    )
+        if current_ticket:
+            # Finalize the ticket data
+            current_ticket.status = Ticket.Status.COMPLETED
+            current_ticket.served_at = timezone.now()
+            current_ticket.save()
+
+            # Display handling time if available (calculated from called_at to served_at)
+            if current_ticket.handling_time:
+                messages.success(
+                    request,
+                    f"✅ {current_ticket.ticket_number} completed. "
+                    f"Handling time: {current_ticket.handling_time}",
+                )
+            else:
+                messages.success(request, f"{current_ticket.ticket_number} completed.")
+        else:
+            messages.info(request, "No ticket currently being served.")
 
     return redirect("counter-dashboard")
 
@@ -178,24 +201,20 @@ def complete(request):
 @login_required
 @role_required("staff")
 def counter_select(request):
-    branch = request.user.branch
 
-    if not branch:
-        messages.error(request, "You are not assigned to any branch.")
-        return redirect("login")
+    branch = request.user.branch
 
     if request.method == "POST":
         counter_id = request.POST.get("counter_id")
 
+        # Reset: Close any counter currently held by this staff member
         Counter.objects.filter(staff=request.user, status=Counter.Status.OPEN).update(
             staff=None, status=Counter.Status.CLOSED
         )
 
         if counter_id:
-            counter = Counter.objects.filter(
-                id=counter_id,
-                branch=branch,
-            ).first()
+            # Assign: Only allow counters from the staff's specific branch
+            counter = Counter.objects.filter(id=counter_id, branch=branch).first()
 
             if counter:
                 counter.staff = request.user
@@ -204,9 +223,8 @@ def counter_select(request):
                 messages.success(request, f"You are now at counter {counter.number}.")
                 return redirect("counter-dashboard")
 
-    available_counters = Counter.objects.filter(
-        branch=branch,
-    ).order_by("number")
+    # Data for display: List all counters in this branch
+    available_counters = Counter.objects.filter(branch=branch).order_by("number")
 
     my_counter = Counter.objects.filter(
         staff=request.user, status=Counter.Status.OPEN
@@ -223,6 +241,7 @@ def counter_select(request):
 @login_required
 @role_required("staff")
 def counter_reports(request):
+    # Start with all completed tickets served by this staff member
     tickets = (
         Ticket.objects.filter(
             served_by=request.user,
@@ -232,6 +251,7 @@ def counter_reports(request):
         .order_by("-served_at")
     )
 
+    # Apply filters based on query parameters
     client_type = request.GET.get("client_type", "")
     service_id = request.GET.get("service", "")
     start_date = request.GET.get("start_date", "")
@@ -250,6 +270,7 @@ def counter_reports(request):
     elif end_date:
         tickets = tickets.filter(served_at__date__lte=end_date)
 
+    # Calculate Average Handling Time (AHT)
     tickets_with_time = tickets.filter(
         called_at__isnull=False,
         served_at__isnull=False,
@@ -288,6 +309,7 @@ def counter_reports(request):
         is_active=True,
     )
 
+    # Pagination
     per_page = request.GET.get("per_page", 10)
 
     try:
