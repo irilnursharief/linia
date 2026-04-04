@@ -1,0 +1,27 @@
+/* static/css/display.css */
+
+@keyframes pulse-highlight {
+    0% {
+        background-color: #3b82f6;
+        /* Bright Blue pulse */
+        border-left-color: #3b82f6;
+        /* Match border to pulse */
+        transform: scale(1.05);
+        box-shadow: 0 0 30px rgba(59, 130, 246, 0.8);
+    }
+
+    100% {
+        /* Restore the original Tailwind Slate-800 and Green-500 colors */
+        background-color: #1e293b;
+        border-left-color: #22c55e;
+        transform: scale(1);
+        box-shadow: none;
+    }
+}
+
+.new-ticket-alert {
+    /* Ensure the border is visible during animation */
+    border-left-width: 8px;
+    border-left-style: solid;
+    animation: pulse-highlight 1.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
