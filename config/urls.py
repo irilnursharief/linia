@@ -7,4 +7,5 @@ urlpatterns = [
     path("counter/", include("counters.urls")),
     path("ajax/", include("queueing.urls_ajax")),
     path("home/", include("queueing.urls")),
+    path("display/", include("display.urls")),
 ]

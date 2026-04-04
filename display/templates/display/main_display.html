@@ -1,0 +1,20 @@
+{% extends 'display/base_display.html' %}
+
+{% block content %}
+<div class="p-10 max-w-[1920px] mx-auto">
+    <div class="flex justify-between items-end mb-10">
+        <div>
+            <h1 class="text-6xl font-black text-white uppercase tracking-tighter italic">LINIA<span class="text-blue-500">.</span></h1>
+            <p class="text-slate-400 text-xl">{{ branch.name }} | Lobby Display</p>
+        </div>
+        <div id="clock" class="text-4xl font-mono text-slate-500"></div>
+    </div>
+    
+    <div id="display-board" 
+        hx-get="{% url 'display:display_update' branch.id %}" 
+        hx-trigger="every 5s" 
+        hx-swap="innerHTML transition:true settle:200ms">
+        {% include 'display/partials/board.html' %}
+    </div>
+</div>
+{% endblock %}

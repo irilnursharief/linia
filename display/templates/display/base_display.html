@@ -1,0 +1,41 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ branch.name }} | Live Queue</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <link rel="stylesheet" href="{% static 'css/display.css' %}">
+</head>
+<body class="bg-slate-900 text-white overflow-hidden">
+    
+    {% block content %}{% endblock %}
+
+    <script>
+        // 1. Clock Logic (Always visible)
+        function updateClock() {
+            const clockEl = document.getElementById('clock');
+            if (clockEl) {
+                const now = new Date();
+                clockEl.innerText = now.toLocaleTimeString([], {
+                    hour: '2-digit', minute:'2-digit', second:'2-digit'
+                });
+            }
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        // 2. Animation Reset Logic (Runs after every HTMX poll)
+        document.body.addEventListener('htmx:afterSettle', function(evt) {
+            const tickets = document.querySelectorAll('.new-ticket-alert');
+            tickets.forEach(ticket => {
+                ticket.classList.remove('new-ticket-alert');
+                void ticket.offsetWidth; // Force CSS reflow
+                ticket.classList.add('new-ticket-alert');
+            });
+        });
+    </script>
+</body>
+</html>
